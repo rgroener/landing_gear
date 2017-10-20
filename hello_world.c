@@ -38,7 +38,7 @@ char c,d, received_byte;
 #define GEAR_UP 	4
 #define DEPLOY		5
 
-#define STEP 100
+#define STEP 50
 
 
 #define MAIN	0
@@ -52,13 +52,14 @@ volatile uint8_t clock_takt, ms, ms10, ms100, sek, entprell;
 volatile uint8_t save_timer;
 uint8_t wait_down, wait_up, trans_up, trans_down;
 volatile uint16_t lg_pos_down, lg_pos_up, servo_position;
-uint8_t points;
+uint8_t points, servo_speed;
 
 uint8_t mode;
 uint8_t eeprom_wait_down EEMEM;
 uint8_t eeprom_wait_up EEMEM;
 uint16_t eeprom_lg_pos_down EEMEM;
 uint16_t eeprom_lg_pos_up EEMEM;
+uint8_t eeprom_servo_speed EEMEM;
 
 
 void uart_send_string(volatile char *s);
@@ -76,7 +77,7 @@ char *zbuffer, *z_buffstart;
 uint8_t incomflag, incompos;
 volatile uint8_t param;//menu states
 volatile uint8_t show, set_param;
-
+volatile uint8_t test;
 #define UART_MAXSTRLEN 10//maximale stringlaenge
 
 
@@ -95,72 +96,84 @@ ISR(USART_RX_vect)
 	uint8_t counter=0;
 	uint16_t result=0;
 	
-	if((uart_str_complete == 0) && (param !=0)) 	
+	
+	if(param!=0)
 	{
-		if(received_byte=='.') //selected parameter += 10
+		if(received_byte=='s')//write new value to variable
 		{
+			uart_str_complete=1;
+			param=0;
+		}
+		
+		if(received_byte=='.')
+		{
+			uart_str_complete=1;
 			switch(param)
 			{
-				case 1:	wait_down += STEP;
-						break;
-				case 2:	 wait_up += STEP;
-						break;
 				case 3:	lg_pos_down += STEP;
 						break;
 				case 4:	lg_pos_up += STEP;
 						break;
-			} 
+			}
+		}
+		if(received_byte==',')
+		{
+			uart_str_complete=1;
+			switch(param)
+			{
+				case 3:	lg_pos_down -= STEP;
+						break;
+				case 4:	lg_pos_up -= STEP;
+						break;
+			}
+		}
+		if(uart_str_complete==1)
+		{
+			if((received_byte=='\n') || (received_byte=='\r'))
+			{
+				param=0;
+				uart_str_complete=0;
+			}
 			
-		}else 	if(received_byte==',')//selected parameter -= 10
-				{
-					switch(param)
-					{
-						case 1:	wait_down -= STEP;
-								break;
-						case 2:	 wait_up -= STEP;
-								break;
-						case 3:	lg_pos_down -= STEP;
-								break;
-						case 4:	lg_pos_up -= STEP;
-								break;
-					} 				
-				}else 	if(received_byte=='s')//write new value to variable
-						{
-							param=0;
-							
-						}else 	if( received_byte != '\n' && received_byte != '\r' && uart_str_count < UART_MAXSTRLEN ) 
-								{
-									// wenn uart_string gerade in Verwendung, neues Zeichen verwerfen
-									// Daten werden erst in uart_string geschrieben, wenn nicht String-Ende/max Zeichenlänge erreicht ist/string gerade verarbeitet wird
-									  uart_string[uart_str_count] = received_byte;
-									  uart_str_count++;
-								}else 
-								{
-									uart_string[uart_str_count] = '\0';
-									uart_str_count = 0;
-															
-									for(counter=0; counter<11;counter++)//string copy due to const char needed by atoi function
-									{
-										buffer[counter] = uart_string[counter];
-									}
-									result=atoi(buffer);
-									switch(param)
-									{
-										case 1:	wait_down = result;
-												break;
-										case 2:	 wait_up = result;
-												break;
-										case 3:	lg_pos_down = result;
-												break;
-										case 4:	lg_pos_up = result;
-												break;
-									} 
-									result=0;
-									param=0;
-									uart_str_complete = 0;
-								}
-	}
+		}
 	
+		if(uart_str_complete == 0) 	
+		{
+			if( received_byte != '\n' && received_byte != '\r' && uart_str_count < UART_MAXSTRLEN ) 
+			{
+				// wenn uart_string gerade in Verwendung, neues Zeichen verwerfen
+				// Daten werden erst in uart_string geschrieben, wenn nicht String-Ende/max Zeichenlänge erreicht ist/string gerade verarbeitet wird
+				uart_string[uart_str_count] = received_byte;
+				uart_str_count++;
+			}else 
+			{
+				uart_string[uart_str_count] = '\0';
+				uart_str_count = 0;
+														
+				for(counter=0; counter<11;counter++)//string copy due to const char needed by atoi function
+				{
+					buffer[counter] = uart_string[counter];
+				}
+				result=atoi(buffer);
+				switch(param)
+				{
+					case 1:	wait_down = result;
+							break;
+					case 2:	wait_up = result;
+							break;
+					case 3:	lg_pos_down = result;
+							break;
+					case 4:	lg_pos_up = result;
+							break;
+					case 5:	servo_speed = result;
+							break;
+				} 
+				result=0;
+				param=0;
+				uart_str_complete = 0;
+			}
+		}
+	}//end of param !=0
 }//end of USART_rx 
 
 void u8g_setup(void)
@@ -231,8 +244,8 @@ void draw(void)
 						u8g_DrawStr(&u8g, 0,15, "param");
 						u8g_DrawStr(&u8g,77, 15, u8g_u8toa(param, 3));
 			
-					u8g_DrawStr(&u8g, 0,25, "show");
-					u8g_DrawStr(&u8g,77, 25, u8g_u8toa(show, 3));	
+					u8g_DrawStr(&u8g, 0,25, "test");
+					u8g_DrawStr(&u8g,77, 25, u8g_u8toa(test, 3));	
 						break;
 		case WAIT:		u8g_DrawStr(&u8g, 0,0, "wait to retract");
 						u8g_DrawStr(&u8g,77, 0, u8g_u8toa(wait_down, 3));
@@ -265,7 +278,7 @@ void draw(void)
 	}//end of draw-switch
 }//end of draw
 
-void inti_eeprom(void)
+void init_eeprom(void)
 {
 	/*Kontrolliert ob schon Speicherzelle in eeprom schon benutzt wurde oder noch FF ist.
 	Falls Zelle noch nie benutzt wurde, wird der Defaultwert ins Eeprom geschrieben*/
@@ -279,11 +292,15 @@ void inti_eeprom(void)
 	}
 	if(eeprom_read_word(&eeprom_lg_pos_down)==0xFF)
 	{
-		eeprom_write_word(&eeprom_lg_pos_down, 20);	
+		eeprom_write_word(&eeprom_lg_pos_down, 3100);	
 	}
 	if(eeprom_read_word(&eeprom_lg_pos_up)==0xFF)
 	{
-		eeprom_write_word(&eeprom_lg_pos_up, 20);	
+		eeprom_write_word(&eeprom_lg_pos_up, 5450);	
+	}
+	if(eeprom_read_byte(&eeprom_servo_speed)==0xFF)
+	{
+		eeprom_write_byte(&eeprom_servo_speed, 1);	
 	}
 }
 
@@ -303,17 +320,17 @@ ISR (TIMER0_COMPA_vect)
 		if(entprell != 0)entprell--;
 		if(mode==RETRACT)
 		{
-			if((servo_position+1) <= lg_pos_up)//increases gear position to fully retract position
+			if((servo_position+servo_speed) <= lg_pos_up)//check if present positon plus next step ist still lower than lg_pos_up
 			{
-				servo_position++;
-			}
+				servo_position += servo_speed;
+			}else servo_position=lg_pos_up;//set servo positon to lg_pos_up
 		}
 		if(mode==DEPLOY)
 		{
-			if((servo_position+1) >= lg_pos_down)//increases gear position to fully retract position
+			if((servo_position-servo_speed) >= lg_pos_down)//check if present positon minus next step is still higher than lg_pos_down
 			{
-				servo_position--;
-			}
+				servo_position -= servo_speed;
+			}else servo_position=lg_pos_down;//set servo position to lg_pos_down
 		}
 	}
 	if(ms10 == 10)//100ms
@@ -331,10 +348,7 @@ ISR (TIMER0_COMPA_vect)
 		if((mode==GEAR_UP)&&(wait_up!=0))wait_up--;
 		if((mode==DEPLOY)&&(trans_down!=0))trans_down--;
 		if((mode==GEAR_DOWN)&&(save_timer!=0))save_timer--;
-		
-		
-		
-		
+			
 		if((mode==RETRACT) || (mode==DEPLOY))
 		{
 			points++;
@@ -401,13 +415,15 @@ int main(void)
 	wait_down = eeprom_read_byte(&eeprom_wait_down);
 	wait_up = eeprom_read_byte(&eeprom_wait_up);
 	lg_pos_down = eeprom_read_word(&eeprom_lg_pos_down);			
-	lg_pos_up = eeprom_read_word(&eeprom_lg_pos_up);			
+	lg_pos_up = eeprom_read_word(&eeprom_lg_pos_up);
+	servo_speed = eeprom_read_byte(&eeprom_servo_speed);
+				
 	
-	wait_down	=	10;				//starts counting to zero when start button is pressed. If zero, gear starts to retract
-	wait_up		=	12;				//starts counting to zero when gear is fully retract. If zero, gear starts to deploy
+	//wait_down	=	10;				//starts counting to zero when start button is pressed. If zero, gear starts to retract
+//wait_up		=	12;				//starts counting to zero when gear is fully retract. If zero, gear starts to deploy
 	
-	trans_up	= 5;				//transition time while retracting
-	trans_down	= 5;				//transition time while deploying
+	//trans_up	= 5;				//transition time while retracting
+	//trans_down	= 5;				//transition time while deploying
 	
 	points = 0;						//visualisation on display during transition phase
 	save_timer = RELOAD_SAVE_TIMER;
@@ -417,6 +433,8 @@ int main(void)
 	param=0;
 	set_param=0;
 	servo_position=lg_pos_down;
+	init_eeprom();
+	test=0;
 
   for(;;)
   {  
@@ -429,7 +447,7 @@ int main(void)
 						{
 							entprell = RELOAD_ENTPRELL;
 							mode = WAIT;
-							wait_down = eeprom_read_byte(&eeprom_wait_down);	
+								
 						}	
 						if(param==0)
 						{
@@ -458,7 +476,13 @@ int main(void)
 												uart_send_string("\n\r\n\rlg_pos_up = ");
 												param=4;
 												show=0;//only print it once
-											}break;			
+											}break;	
+								case '5':	if(show)
+											{
+												uart_send_string("\n\r\n\rservo_speed = ");
+												param=5;
+												show=0;//only print it once
+											}break;					
 								case 's':	if(show)
 											{
 												uart_send_string("\n\r\n\rcurrent parameter saved to eeprom...");
@@ -466,6 +490,7 @@ int main(void)
 												eeprom_write_byte(&eeprom_wait_up, wait_up);
 												eeprom_write_word(&eeprom_lg_pos_down, lg_pos_down);
 												eeprom_write_word(&eeprom_lg_pos_up, lg_pos_up);
+												eeprom_write_byte(&eeprom_servo_speed, servo_speed);
 												save_timer = RELOAD_SAVE_TIMER;
 												show=0;//only print it once
 											}
@@ -482,6 +507,7 @@ int main(void)
 												uart_send_string("\n\r\n\rwait_up = delay before gear starts to deploy after being fully retracted");
 												uart_send_string("\n\r\n\rlg_gear_down = position landing gear when fully deployed");
 												uart_send_string("\n\r\n\rlg_gear_up = position landing gear when fully retracted");
+												show=0;
 											}break;				
 								default:	if(show)//print new screen on serial
 											{
@@ -501,6 +527,10 @@ int main(void)
 												uart_send_string("4: lg_pos_up   =  ");
 												uart_send_string(itoa(lg_pos_up, buffer,10));
 												uart_send_string("\n\r");
+												
+												uart_send_string("5: servo_speed   =  ");
+												uart_send_string(itoa(servo_speed, buffer,10));
+												uart_send_string("\n\r");
 															
 												uart_send_string("\n\r\n\rtype nr for parameter to change");
 												uart_send_string("\n\rtype 's' to save parameter in eeprom");
@@ -508,10 +538,11 @@ int main(void)
 												show=0;//only print it once
 											}//end of if show
 											break;
-								case '.':	break;
-							}//end of switch received byte
+								}//end of switch received byte
 						}//eof param=0
-							break;
+						if(param==3)servo_position=lg_pos_down;
+						if(param==4)servo_position=lg_pos_up;
+						break;
 		case WAIT:		//Startbutton has been pressed, waiting time started to run down
 						if(wait_down==0)
 						{
@@ -521,11 +552,10 @@ int main(void)
 						}
 						break;
 		case RETRACT:	//Landingear starts to retract
-						//servo_position=lg_pos_up;	//hand over new lg position
 						if(servo_position==lg_pos_up)
 						{
 							mode=GEAR_UP;
-							wait_up=eeprom_read_byte(&eeprom_wait_up);
+							
 						}
 						break;
 		case GEAR_UP:	//Gear is up for selected time
@@ -536,12 +566,11 @@ int main(void)
 							points=0;
 						}
 						break;
-		case DEPLOY:	//Landinggear started to deploy
-						//servo_position=lg_pos_down;	//hand over new lg position
-						if(servo_position==lg_pos_down)
+		case DEPLOY:	if(servo_position==lg_pos_down)
 						{
 							mode = GEAR_DOWN;
-							
+							wait_up=eeprom_read_byte(&eeprom_wait_up);
+							wait_down = eeprom_read_byte(&eeprom_wait_down);
 						}					
 						
 						break;

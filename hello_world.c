@@ -105,7 +105,7 @@ ISR(USART_RX_vect)
 			param=0;
 		}
 		
-		if(received_byte=='.')
+		if(received_byte=='p')
 		{
 			uart_str_complete=1;
 			switch(param)
@@ -116,7 +116,7 @@ ISR(USART_RX_vect)
 						break;
 			}
 		}
-		if(received_byte==',')
+		if(received_byte=='o')
 		{
 			uart_str_complete=1;
 			switch(param)
@@ -127,6 +127,7 @@ ISR(USART_RX_vect)
 						break;
 			}
 		}
+		/*Check if fine adjusting (',','.') is finished*/
 		if(uart_str_complete==1)
 		{
 			if((received_byte=='\n') || (received_byte=='\r'))
@@ -420,7 +421,7 @@ int main(void)
 				
 	
 	//wait_down	=	10;				//starts counting to zero when start button is pressed. If zero, gear starts to retract
-//wait_up		=	12;				//starts counting to zero when gear is fully retract. If zero, gear starts to deploy
+	//wait_up		=	12;				//starts counting to zero when gear is fully retract. If zero, gear starts to deploy
 	
 	//trans_up	= 5;				//transition time while retracting
 	//trans_down	= 5;				//transition time while deploying
@@ -462,17 +463,25 @@ int main(void)
 								case '2':	if(show)
 											{
 												uart_send_string("\n\r\n\rwait_up = ");
+												
 												param=2;
 												show=0;//only print it once
 											}break;
 								case '3':	if(show)
 											{
+												uart_send_string("\n\r\n\renter new value or fine adjust with 'o' and 'p'");
+												uart_send_string("\n\rpress 'o' to increase position");
+												uart_send_string("\n\rpress 'p' to decrease position");
 												uart_send_string("\n\r\n\rlg_pos_down = ");
+												
 												param=3;
 												show=0;//only print it once
 											}break;
 								case '4':	if(show)
 											{
+												uart_send_string("\n\r\n\enter new value or fine adjust with 'o' and 'p'");
+												uart_send_string("\n\rpress 'o' to increase position");
+												uart_send_string("\n\rpress 'p' to decrease position");
 												uart_send_string("\n\r\n\rlg_pos_up = ");
 												param=4;
 												show=0;//only print it once
@@ -484,13 +493,13 @@ int main(void)
 												show=0;//only print it once
 											}break;					
 								case 's':	if(show)
-											{
+											{/*values will only be saved if they differ from the one stored in the eeprom*/
 												uart_send_string("\n\r\n\rcurrent parameter saved to eeprom...");
-												eeprom_write_byte(&eeprom_wait_down, wait_down);
-												eeprom_write_byte(&eeprom_wait_up, wait_up);
-												eeprom_write_word(&eeprom_lg_pos_down, lg_pos_down);
-												eeprom_write_word(&eeprom_lg_pos_up, lg_pos_up);
-												eeprom_write_byte(&eeprom_servo_speed, servo_speed);
+												if(wait_down != eeprom_read_byte(&eeprom_wait_down))eeprom_write_byte(&eeprom_wait_down, wait_down);
+												if(wait_up != eeprom_read_byte(&eeprom_wait_up))eeprom_write_byte(&eeprom_wait_up, wait_up);
+												if(lg_pos_down != eeprom_read_word(&eeprom_lg_pos_down))eeprom_write_word(&eeprom_lg_pos_down, lg_pos_down);
+												if(lg_pos_up != eeprom_read_word(&eeprom_lg_pos_up))eeprom_write_word(&eeprom_lg_pos_up, lg_pos_up);
+												if(servo_speed != eeprom_read_byte(&eeprom_servo_speed))eeprom_write_byte(&eeprom_servo_speed, servo_speed);
 												save_timer = RELOAD_SAVE_TIMER;
 												show=0;//only print it once
 											}
@@ -503,28 +512,32 @@ int main(void)
 											}break;		
 								case 'h':	if(show)
 											{
-												uart_send_string("\n\r\n\rwait_down = delay before gear starts to retract after pressing start button");
-												uart_send_string("\n\r\n\rwait_up = delay before gear starts to deploy after being fully retracted");
+												uart_send_string("\n\r\n\rwait_down = delay before gear starts to retract");
+												uart_send_string("\n\r\n\rwait_up = delay before gear starts to deploy");
 												uart_send_string("\n\r\n\rlg_gear_down = position landing gear when fully deployed");
 												uart_send_string("\n\r\n\rlg_gear_up = position landing gear when fully retracted");
+												uart_send_string("\n\r\n\rservo_speed = speed of landing gear when moving");
 												show=0;
 											}break;				
 								default:	if(show)//print new screen on serial
 											{
-												uart_send_string("\n\r\n\rcurrent values \n\r");
-												uart_send_string("1: wait_down   =  ");
+												uart_send_string("\n\r\n\n\r\n\n\r\n\n\r\n\r");
+												uart_send_string("**********************");
+												uart_send_string("\n\r\n\rcurrent values \n\r\n\r");
+												uart_send_string("**********************\n\r\n\r");
+												uart_send_string("1: wait_down     =  ");
 												uart_send_string(itoa(wait_down, buffer,10));
 												uart_send_string("\n\r");
 																				
-												uart_send_string("2: wait_up     =  ");
+												uart_send_string("2: wait_up       =  ");
 												uart_send_string(itoa(wait_up, buffer,10));
 												uart_send_string("\n\r");
 																				
-												uart_send_string("3: lg_pos_down =  ");
+												uart_send_string("3: lg_pos_down   =  ");
 												uart_send_string(itoa(lg_pos_down, buffer,10));
 												uart_send_string("\n\r");
 																			
-												uart_send_string("4: lg_pos_up   =  ");
+												uart_send_string("4: lg_pos_up     =  ");
 												uart_send_string(itoa(lg_pos_up, buffer,10));
 												uart_send_string("\n\r");
 												
@@ -532,9 +545,9 @@ int main(void)
 												uart_send_string(itoa(servo_speed, buffer,10));
 												uart_send_string("\n\r");
 															
-												uart_send_string("\n\r\n\rtype nr for parameter to change");
+												uart_send_string("\n\r\n\rtype 'nr' for parameter to change");
 												uart_send_string("\n\rtype 's' to save parameter in eeprom");
-												uart_send_string("\n\rtype 'h' for help");
+												uart_send_string("\n\rtype 'h' for help\n\r");
 												show=0;//only print it once
 											}//end of if show
 											break;
@@ -542,6 +555,7 @@ int main(void)
 						}//eof param=0
 						if(param==3)servo_position=lg_pos_down;
 						if(param==4)servo_position=lg_pos_up;
+						if(param==0)servo_position=lg_pos_down;
 						break;
 		case WAIT:		//Startbutton has been pressed, waiting time started to run down
 						if(wait_down==0)
